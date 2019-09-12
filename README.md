@@ -3,7 +3,7 @@
 This repo is a fork of KCP-go that tries to maintain compatibility, while making this into a better generic UDP streaming tool. More specifically, it seeks to avoid KCP's focus on "unfair" network flooding, decrease complexity, and improve performance. GephKCP is used to let Geph2 roam seamlessly in intermittent network conditions, NOT to abuse the network.
 
 TODO:
-- [ ] Remove all encryption/obfuscation features (andled at different layer)
+- [ ] Remove all encryption/obfuscation features (handled at different layer)
 - [ ] Saner "unfair" mode (ex: token-bucket limiting to 105% of rolling goodput)
 - [ ] Smarter congestion control than the textbook Reno currently in use. More specifically cwnd goes up way too slow.
 
