@@ -1,7 +1,5 @@
 package kcp
 
-import "log"
-
 func (kcp *KCP) bic_onloss() {
 	beta := 0.125
 	if kcp.cwnd < kcp.wmax {
@@ -33,5 +31,4 @@ func (kcp *KCP) bic_onack(acks int32) {
 			kcp.cwnd = float64(kcp.rmt_wnd)
 		}
 	}
-	log.Println("cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
 }
