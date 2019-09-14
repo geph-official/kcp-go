@@ -505,6 +505,7 @@ func (kcp *KCP) parse_una(una uint32) {
 	for k := range kcp.snd_buf {
 		seg := &kcp.snd_buf[k]
 		if _itimediff(una, seg.sn) > 0 {
+			kcp.processAck(seg)
 			kcp.delSegment(seg)
 			count++
 		} else {
