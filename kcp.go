@@ -2,7 +2,7 @@ package kcp
 
 import (
 	"encoding/binary"
-	"log"
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -470,7 +470,7 @@ func (kcp *KCP) parse_ack(sn uint32) {
 			ackElapsed := kcp.DRE.lastDelTime.Sub(kcp.DRE.ppDelTime[seg.sn])
 			delete(kcp.DRE.ppDelTime, seg.sn)
 			ackRate := dataAcked / ackElapsed.Seconds()
-			log.Println("ackRate =", ackRate/1024, "KiB/s")
+			panic(fmt.Sprint("ackRate =", ackRate/1024, "KiB/s"))
 			kcp.delSegment(seg)
 			break
 		}
