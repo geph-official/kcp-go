@@ -137,17 +137,18 @@ func (seg *segment) encode(ptr []byte) []byte {
 
 // KCP defines a single KCP connection
 type KCP struct {
-	conv, mtu, mss, state                  uint32
-	snd_una, snd_nxt, rcv_nxt              uint32
-	ssthresh                               uint32
-	rx_rttvar, rx_srtt                     int32
-	rx_rto, rx_minrto                      uint32
-	snd_wnd, rcv_wnd, rmt_wnd, cwnd, probe uint32
-	interval, ts_flush                     uint32
-	nodelay, updated                       uint32
-	ts_probe, probe_wait                   uint32
-	dead_link, incr                        uint32
-	wmax                                   uint32
+	conv, mtu, mss, state            uint32
+	snd_una, snd_nxt, rcv_nxt        uint32
+	ssthresh                         uint32
+	rx_rttvar, rx_srtt               int32
+	rx_rto, rx_minrto                uint32
+	snd_wnd, rcv_wnd, rmt_wnd, probe uint32
+	cwnd                             float64
+	interval, ts_flush               uint32
+	nodelay, updated                 uint32
+	ts_probe, probe_wait             uint32
+	dead_link                        uint32
+	wmax                             float64
 
 	fastresend     int32
 	nocwnd, stream int32
@@ -649,11 +650,11 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 
 func (kcp *KCP) bic_onack() {
 	// TCP BIC
-	var bicinc int32
+	var bicinc float64
 	if kcp.cwnd < kcp.wmax {
-		bicinc = int32((kcp.wmax - kcp.cwnd) / 2)
+		bicinc = (kcp.wmax - kcp.cwnd) / 2
 	} else {
-		bicinc = int32(kcp.cwnd) - int32(kcp.wmax)
+		bicinc = kcp.cwnd - kcp.wmax
 	}
 	if bicinc <= 1 {
 		bicinc = 1
@@ -662,13 +663,10 @@ func (kcp *KCP) bic_onack() {
 			bicinc = 32
 		}
 	}
-	floatcwnd := float64(kcp.incr/kcp.mss) + float64(bicinc)/float64(kcp.cwnd)
-	kcp.incr = uint32(float64(kcp.mss) * floatcwnd)
-	kcp.cwnd = kcp.incr / kcp.mss
-	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; floatcwnd =", floatcwnd, "; wmax =", kcp.wmax)
-	if kcp.cwnd > kcp.rmt_wnd {
-		kcp.cwnd = kcp.rmt_wnd
-		kcp.incr = kcp.rmt_wnd * kcp.mss
+	kcp.cwnd += bicinc / kcp.cwnd
+	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
+	if uint32(kcp.cwnd) > kcp.rmt_wnd {
+		kcp.cwnd = float64(kcp.rmt_wnd)
 	}
 }
 
@@ -766,7 +764,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 	// calculate window size
 	cwnd := _imin_(kcp.snd_wnd, kcp.rmt_wnd)
 	if kcp.nocwnd == 0 {
-		cwnd = _imin_(kcp.cwnd, cwnd)
+		cwnd = _imin_(uint32(kcp.cwnd), cwnd)
 	}
 
 	// sliding window, controlled by snd_nxt && sna_una+cwnd
@@ -890,8 +888,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			if kcp.ssthresh < IKCP_THRESH_MIN {
 				kcp.ssthresh = IKCP_THRESH_MIN
 			}
-			kcp.cwnd = kcp.ssthresh + resent
-			kcp.incr = kcp.cwnd * kcp.mss
+			kcp.cwnd = float64(inflight/2 + resent)
 		}
 
 		// congestion control, https://tools.ietf.org/html/rfc5681
@@ -899,18 +896,16 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			// BIC
 			beta := 0.125
 			if kcp.cwnd < kcp.wmax {
-				kcp.wmax = uint32(float64(cwnd) * (2.0 - beta) / 2.0)
+				kcp.wmax = kcp.cwnd * (2.0 - beta) / 2.0
 			} else {
 				kcp.wmax = kcp.cwnd
 			}
-			kcp.cwnd = uint32(float64(cwnd) * (1.0 - beta))
-			kcp.incr = kcp.mss * kcp.cwnd
+			kcp.cwnd = kcp.cwnd * (1.0 - beta)
 			log.Println("lost", lostSegs+fastRetransSegs, "segments, decrease cwnd!")
 		}
 
 		if kcp.cwnd < 1 {
 			kcp.cwnd = 1
-			kcp.incr = kcp.mss
 		}
 	}
 
