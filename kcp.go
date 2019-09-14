@@ -666,7 +666,9 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		if acks := _itimediff(kcp.snd_una, snd_una); acks > 0 {
 			// update speed sample
 			speedSamp := float64(acks) / time.Since(kcp.DRE.lastAckTime).Seconds()
-			kcp.DRE.interval = 0.99*kcp.DRE.interval + 0.01*(1/speedSamp)
+			for i := 0; i < int(acks); i++ {
+				kcp.DRE.interval = 0.9*kcp.DRE.interval + 0.1*(1/speedSamp)
+			}
 			kcp.DRE.lastAckTime = time.Now()
 			log.Println("Speed estimate is", 1/kcp.DRE.interval, "pkt/s")
 			switch CongestionControl {
