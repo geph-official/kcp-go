@@ -865,15 +865,15 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 	if kcp.nocwnd == 0 {
 		// update ssthresh
 		// rate halving, https://tools.ietf.org/html/rfc6937
-		if change > 0 {
-			inflight := kcp.snd_nxt - kcp.snd_una
-			kcp.ssthresh = inflight / 2
-			if kcp.ssthresh < IKCP_THRESH_MIN {
-				kcp.ssthresh = IKCP_THRESH_MIN
-			}
-			kcp.cwnd = kcp.ssthresh + resent
-			kcp.incr = kcp.cwnd * kcp.mss
-		}
+		// if change > 0 {
+		// 	inflight := kcp.snd_nxt - kcp.snd_una
+		// 	kcp.ssthresh = inflight / 2
+		// 	if kcp.ssthresh < IKCP_THRESH_MIN {
+		// 		kcp.ssthresh = IKCP_THRESH_MIN
+		// 	}
+		// 	kcp.cwnd = kcp.ssthresh + resent
+		// 	kcp.incr = kcp.cwnd * kcp.mss
+		// }
 
 		// congestion control, https://tools.ietf.org/html/rfc5681
 		if lost > 0 {
