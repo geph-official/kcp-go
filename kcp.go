@@ -902,7 +902,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		// }
 
 		// congestion control, https://tools.ietf.org/html/rfc5681
-		if lostSegs+fastRetransSegs > 0 {
+		if lostSegs+change > 0 {
 			// BIC
 			beta := 0.05
 			if kcp.cwnd < kcp.wmax {
