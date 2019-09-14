@@ -634,10 +634,10 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 
 	// cwnd update when packet arrived
 	if kcp.nocwnd == 0 {
-		if _itimediff(kcp.snd_una, snd_una) > 0 {
+		if acks := _itimediff(kcp.snd_una, snd_una); acks > 0 {
 			switch kcp.concontrol {
 			case CongestionControlBIC:
-				kcp.bic_onack()
+				kcp.bic_onack(acks)
 			}
 		}
 	}
@@ -648,26 +648,28 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	return 0
 }
 
-func (kcp *KCP) bic_onack() {
+func (kcp *KCP) bic_onack(acks int32) {
 	// TCP BIC
-	var bicinc float64
-	if kcp.cwnd < kcp.wmax {
-		bicinc = (kcp.wmax - kcp.cwnd) / 2
-	} else {
-		bicinc = kcp.cwnd - kcp.wmax
-	}
-	if bicinc <= 1 {
-		bicinc = 1
-	} else {
-		if bicinc > 128 {
-			bicinc = 128
+	for i := 0; i < int(acks); i++ {
+		var bicinc float64
+		if kcp.cwnd < kcp.wmax {
+			bicinc = (kcp.wmax - kcp.cwnd) / 2
+		} else {
+			bicinc = kcp.cwnd - kcp.wmax
+		}
+		if bicinc <= 1 {
+			bicinc = 1
+		} else {
+			if bicinc > 32 {
+				bicinc = 32
+			}
+		}
+		kcp.cwnd += bicinc / kcp.cwnd
+		if uint32(kcp.cwnd) > kcp.rmt_wnd {
+			kcp.cwnd = float64(kcp.rmt_wnd)
 		}
 	}
-	kcp.cwnd += bicinc / kcp.cwnd
-	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
-	if uint32(kcp.cwnd) > kcp.rmt_wnd {
-		kcp.cwnd = float64(kcp.rmt_wnd)
-	}
+	log.Println("cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
 }
 
 func (kcp *KCP) wnd_unused() uint16 {
