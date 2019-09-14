@@ -220,6 +220,7 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp.dead_link = IKCP_DEADLINK
 	kcp.output = output
 	kcp.wmax = 1 << 30
+	kcp.DRE.lastAckTime = time.Now()
 	if CongestionControl == "BBR" {
 		//kcp.bbrOnConnectionInit()
 	}
