@@ -31,6 +31,12 @@ const (
 	IKCP_PROBE_LIMIT = 120000 // up to 120 secs to probe window
 )
 
+// Congestion control constants.
+const (
+	CongestionControlBIC = 0
+	CongestionControlBBR = 1
+)
+
 // monotonic reference time point
 var refTime time.Time = time.Now()
 
@@ -145,6 +151,8 @@ type KCP struct {
 
 	fastresend     int32
 	nocwnd, stream int32
+
+	concontrol int
 
 	snd_queue []segment
 	rcv_queue []segment
@@ -626,59 +634,11 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	// cwnd update when packet arrived
 	if kcp.nocwnd == 0 {
 		if _itimediff(kcp.snd_una, snd_una) > 0 {
-			// TCP BIC
-			var bicinc int32
-			if kcp.cwnd < kcp.wmax {
-				bicinc = int32((kcp.wmax - kcp.cwnd) / 2)
-			} else {
-				bicinc = int32(kcp.cwnd) - int32(kcp.wmax)
-			}
-			var changeincr bool
-			if bicinc <= 0 {
-				mss := kcp.mss
-				if kcp.incr < mss {
-					kcp.incr = mss
-				}
-				kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
-				log.Println("incr to", kcp.incr)
-				if (kcp.cwnd+1)*mss <= kcp.incr {
-					bicinc = 1
-				} else {
-					bicinc = 0
-				}
-			} else {
-				changeincr = true
-				if bicinc > 8 {
-					bicinc = 8
-				}
-			}
-			log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
-			kcp.cwnd += uint32(bicinc)
-			if changeincr {
-				kcp.incr += kcp.mss * uint32(bicinc)
-			}
-			if kcp.cwnd > kcp.rmt_wnd {
-				kcp.cwnd = kcp.rmt_wnd
-				kcp.incr = kcp.rmt_wnd * kcp.mss
+			switch kcp.concontrol {
+			case CongestionControlBIC:
+				kcp.bic_onack()
 			}
 
-			// if kcp.cwnd < kcp.rmt_wnd {
-			// 	mss := kcp.mss
-			// 	if kcp.cwnd < kcp.ssthresh {
-			// 		kcp.cwnd++
-			// 		log.Println("cwnd < ssthresh; cwnd =", kcp.cwnd)
-			// 		kcp.incr += mss
-			// 	} else {
-			// 		if kcp.incr < mss {
-			// 			kcp.incr = mss
-			// 		}
-			// 		kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
-			// 		log.Println("cwnd > ssthresh; cwnd =", kcp.cwnd)
-			// 		if (kcp.cwnd+1)*mss <= kcp.incr {
-			// 			kcp.cwnd++
-			// 		}
-			// 	}
-			// }
 		}
 	}
 
@@ -686,6 +646,31 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		kcp.flush(true)
 	}
 	return 0
+}
+
+func (kcp *KCP) bic_onack() {
+	// TCP BIC
+	var bicinc int32
+	if kcp.cwnd < kcp.wmax {
+		bicinc = int32((kcp.wmax - kcp.cwnd) / 2)
+	} else {
+		bicinc = int32(kcp.cwnd) - int32(kcp.wmax)
+	}
+	if bicinc <= 1 {
+		bicinc = 1
+	} else {
+		if bicinc > 32 {
+			bicinc = 32
+		}
+	}
+	floatcwnd := float64(kcp.cwnd) + float64(bicinc)/float64(kcp.cwnd)
+	kcp.incr = uint32(float64(kcp.mss) * floatcwnd)
+	kcp.cwnd = kcp.incr / kcp.mss
+	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
+	if kcp.cwnd > kcp.rmt_wnd {
+		kcp.cwnd = kcp.rmt_wnd
+		kcp.incr = kcp.rmt_wnd * kcp.mss
+	}
 }
 
 func (kcp *KCP) wnd_unused() uint16 {
@@ -922,13 +907,6 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			kcp.cwnd = uint32(float64(cwnd) * (1.0 - beta))
 			kcp.incr = kcp.mss * kcp.cwnd
 			log.Println("lost", lostSegs+fastRetransSegs, "segments, decrease cwnd!")
-			// // reno
-			// kcp.ssthresh = cwnd / 2
-			// if kcp.ssthresh < IKCP_THRESH_MIN {
-			// 	kcp.ssthresh = IKCP_THRESH_MIN
-			// }
-			// kcp.cwnd = kcp.ssthresh
-			// kcp.incr = kcp.mss * kcp.cwnd
 		}
 
 		if kcp.cwnd < 1 {
