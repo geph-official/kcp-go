@@ -910,7 +910,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		// }
 
 		// congestion control, https://tools.ietf.org/html/rfc5681
-		if lostSegs+change > 0 {
+		if lostSegs > 0 {
 			// BIC
 			beta := 0.5
 			if kcp.cwnd < kcp.wmax {
@@ -920,7 +920,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			}
 			kcp.cwnd = uint32(float64(cwnd) * (1.0 - beta))
 			kcp.incr = kcp.mss * kcp.cwnd
-			log.Println("lost", lostSegs+fastRetransSegs, "segments, decrease cwnd!")
+			log.Println("lost", lostSegs, "segments, decrease cwnd!")
 			// // reno
 			// kcp.ssthresh = cwnd / 2
 			// if kcp.ssthresh < IKCP_THRESH_MIN {
