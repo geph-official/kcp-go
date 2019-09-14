@@ -877,13 +877,13 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 		// congestion control, https://tools.ietf.org/html/rfc5681
 		if lost > 0 {
-			// aggressiveness of 10 renos
-			kcp.ssthresh = cwnd * 9 / 10
+			// reno
+			kcp.ssthresh = cwnd / 2
 			if kcp.ssthresh < IKCP_THRESH_MIN {
 				kcp.ssthresh = IKCP_THRESH_MIN
 			}
 			kcp.cwnd = kcp.ssthresh
-			kcp.incr = kcp.mss
+			kcp.incr = kcp.mss * kcp.cwnd
 		}
 
 		if kcp.cwnd < 1 {
