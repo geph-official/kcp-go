@@ -641,8 +641,9 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 					kcp.incr = mss
 				}
 				kcp.incr += (mss*mss)/kcp.incr + (mss / 4)
+				log.Println("incr to", kcp.incr)
 				if (kcp.cwnd+1)*mss <= kcp.incr {
-					bicinc = 4
+					bicinc = 1
 				} else {
 					bicinc = 0
 				}
@@ -904,7 +905,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		// congestion control, https://tools.ietf.org/html/rfc5681
 		if lostSegs+change > 0 {
 			// BIC
-			beta := 0.05
+			beta := 0.5
 			if kcp.cwnd < kcp.wmax {
 				kcp.wmax = uint32(float64(cwnd) * (2.0 - beta) / 2.0)
 			} else {
