@@ -141,6 +141,7 @@ type KCP struct {
 	nodelay, updated                       uint32
 	ts_probe, probe_wait                   uint32
 	dead_link, incr                        uint32
+	wmax                                   uint32
 
 	fastresend     int32
 	nocwnd, stream int32
@@ -183,6 +184,7 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp.ssthresh = IKCP_THRESH_INIT
 	kcp.dead_link = IKCP_DEADLINK
 	kcp.output = output
+	kcp.wmax = 1 << 30
 	return kcp
 }
 
@@ -624,27 +626,51 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	// cwnd update when packet arrived
 	if kcp.nocwnd == 0 {
 		if _itimediff(kcp.snd_una, snd_una) > 0 {
-			if kcp.cwnd < kcp.rmt_wnd {
+			// TCP BIC
+			var bicinc int32
+			if kcp.cwnd < kcp.wmax {
+				bicinc = int32((kcp.wmax - kcp.cwnd) / 2)
+			} else {
+				bicinc = int32(kcp.cwnd) - int32(kcp.wmax)
+			}
+			if bicinc > 4 {
+				bicinc = 4
+			} else if bicinc <= 0 {
 				mss := kcp.mss
-				if kcp.cwnd < kcp.ssthresh {
-					kcp.cwnd++
-					log.Println("cwnd < ssthresh; cwnd =", kcp.cwnd)
-					kcp.incr += mss
-				} else {
-					if kcp.incr < mss {
-						kcp.incr = mss
-					}
-					kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
-					log.Println("cwnd > ssthresh; cwnd =", kcp.cwnd)
-					if (kcp.cwnd+1)*mss <= kcp.incr {
-						kcp.cwnd++
-					}
+				if kcp.incr < mss {
+					kcp.incr = mss
 				}
-				if kcp.cwnd > kcp.rmt_wnd {
-					kcp.cwnd = kcp.rmt_wnd
-					kcp.incr = kcp.rmt_wnd * mss
+				kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
+				if (kcp.cwnd+1)*mss <= kcp.incr {
+					bicinc = 1
+				} else {
+					bicinc = 0
 				}
 			}
+			log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
+			kcp.cwnd = kcp.cwnd
+
+			// if kcp.cwnd < kcp.rmt_wnd {
+			// 	mss := kcp.mss
+			// 	if kcp.cwnd < kcp.ssthresh {
+			// 		kcp.cwnd++
+			// 		log.Println("cwnd < ssthresh; cwnd =", kcp.cwnd)
+			// 		kcp.incr += mss
+			// 	} else {
+			// 		if kcp.incr < mss {
+			// 			kcp.incr = mss
+			// 		}
+			// 		kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
+			// 		log.Println("cwnd > ssthresh; cwnd =", kcp.cwnd)
+			// 		if (kcp.cwnd+1)*mss <= kcp.incr {
+			// 			kcp.cwnd++
+			// 		}
+			// 	}
+			// 	if kcp.cwnd > kcp.rmt_wnd {
+			// 		kcp.cwnd = kcp.rmt_wnd
+			// 		kcp.incr = kcp.rmt_wnd * mss
+			// 	}
+			// }
 		}
 	}
 
@@ -876,14 +902,23 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		// }
 
 		// congestion control, https://tools.ietf.org/html/rfc5681
-		if lost > 0 {
-			// reno
-			kcp.ssthresh = cwnd / 2
-			if kcp.ssthresh < IKCP_THRESH_MIN {
-				kcp.ssthresh = IKCP_THRESH_MIN
+		if lostSegs+fastRetransSegs > 0 {
+			// BIC
+			beta := 0.5
+			if kcp.cwnd < kcp.wmax {
+				kcp.wmax = uint32(float64(cwnd) * (2.0 - beta) / 2.0)
+			} else {
+				kcp.wmax = kcp.cwnd
 			}
-			kcp.cwnd = kcp.ssthresh
-			kcp.incr = kcp.mss * kcp.cwnd
+			kcp.cwnd = uint32(float64(cwnd) * (1.0 - beta))
+			log.Println("lost", lostSegs+fastRetransSegs, "segments, decrease cwnd!")
+			// // reno
+			// kcp.ssthresh = cwnd / 2
+			// if kcp.ssthresh < IKCP_THRESH_MIN {
+			// 	kcp.ssthresh = IKCP_THRESH_MIN
+			// }
+			// kcp.cwnd = kcp.ssthresh
+			// kcp.incr = kcp.mss * kcp.cwnd
 		}
 
 		if kcp.cwnd < 1 {
