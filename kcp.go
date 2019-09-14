@@ -659,8 +659,8 @@ func (kcp *KCP) bic_onack() {
 	if bicinc <= 1 {
 		bicinc = 1
 	} else {
-		if bicinc > 32 {
-			bicinc = 32
+		if bicinc > 128 {
+			bicinc = 128
 		}
 	}
 	kcp.cwnd += bicinc / kcp.cwnd
