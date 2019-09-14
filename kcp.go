@@ -662,10 +662,10 @@ func (kcp *KCP) bic_onack() {
 			bicinc = 32
 		}
 	}
-	floatcwnd := float64(kcp.cwnd) + float64(bicinc)/float64(kcp.cwnd)
+	floatcwnd := float64(kcp.incr/kcp.mss) + float64(bicinc)/float64(kcp.cwnd)
 	kcp.incr = uint32(float64(kcp.mss) * floatcwnd)
 	kcp.cwnd = kcp.incr / kcp.mss
-	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; floatcwnd =", floatcwnd, "; wmax =", kcp.wmax, "; rmt_wnd =", kcp.rmt_wnd)
+	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; floatcwnd =", floatcwnd, "; wmax =", kcp.wmax)
 	if kcp.cwnd > kcp.rmt_wnd {
 		kcp.cwnd = kcp.rmt_wnd
 		kcp.incr = kcp.rmt_wnd * kcp.mss
