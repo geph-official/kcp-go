@@ -175,7 +175,7 @@ type KCP struct {
 
 	DRE struct {
 		lastAckTime time.Time
-		interval    float64
+		speed       float64
 	}
 
 	fastresend     int32
@@ -667,9 +667,9 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		if acks := _itimediff(kcp.snd_una, snd_una); acks > 0 {
 			// update speed sample
 			speedSamp := float64(acks) / time.Since(kcp.DRE.lastAckTime).Seconds()
-			kcp.DRE.interval = 0.99*kcp.DRE.interval + 0.01*(1/speedSamp)
+			kcp.DRE.speed = 0.99*kcp.DRE.speed + 0.01*speedSamp
 			kcp.DRE.lastAckTime = time.Now()
-			log.Println("Speed estimate is", 1/kcp.DRE.interval, "pkt/s")
+			log.Println("Speed estimate is", kcp.DRE.speed, "pkt/s")
 			switch CongestionControl {
 			case "BIC":
 				kcp.bic_onack(acks)
