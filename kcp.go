@@ -904,7 +904,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		// congestion control, https://tools.ietf.org/html/rfc5681
 		if lostSegs+fastRetransSegs > 0 {
 			// BIC
-			beta := 0.5
+			beta := 0.05
 			if kcp.cwnd < kcp.wmax {
 				kcp.wmax = uint32(float64(cwnd) * (2.0 - beta) / 2.0)
 			} else {
