@@ -911,6 +911,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 				kcp.wmax = kcp.cwnd
 			}
 			kcp.cwnd = uint32(float64(cwnd) * (1.0 - beta))
+			kcp.incr = kcp.mss * kcp.cwnd
 			log.Println("lost", lostSegs+fastRetransSegs, "segments, decrease cwnd!")
 			// // reno
 			// kcp.ssthresh = cwnd / 2
