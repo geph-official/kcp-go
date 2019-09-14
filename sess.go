@@ -279,7 +279,8 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 
 		// make sure write do not overflow the max sliding window on both side
 		waitsnd := s.kcp.WaitSnd()
-		if waitsnd < int(s.kcp.snd_wnd) && waitsnd < int(s.kcp.rmt_wnd) {
+		if waitsnd < int(s.kcp.snd_wnd) && waitsnd < int(s.kcp.rmt_wnd) &&
+			(s.kcp.nocwnd == 1 || waitsnd < int(s.kcp.cwnd)) {
 			for _, b := range v {
 				n += len(b)
 				for {
