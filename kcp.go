@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"encoding/binary"
+	"log"
 	"sync/atomic"
 	"time"
 )
@@ -627,12 +628,14 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 				mss := kcp.mss
 				if kcp.cwnd < kcp.ssthresh {
 					kcp.cwnd++
+					log.Println("cwnd < ssthresh; cwnd =", kcp.cwnd)
 					kcp.incr += mss
 				} else {
 					if kcp.incr < mss {
 						kcp.incr = mss
 					}
 					kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
+					log.Println("cwnd > ssthresh; cwnd =", kcp.cwnd)
 					if (kcp.cwnd+1)*mss <= kcp.incr {
 						kcp.cwnd++
 					}
