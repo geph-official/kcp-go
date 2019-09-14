@@ -174,8 +174,10 @@ type KCP struct {
 	}
 
 	DRE struct {
-		lastAckTime time.Time
-		speed       float64
+		totalDelivered float64
+		ppDelivered    map[uint32]float64
+		ppDelTime      map[uint32]time.Time
+		lastDelTime    time.Time
 	}
 
 	fastresend     int32
@@ -220,7 +222,8 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp.dead_link = IKCP_DEADLINK
 	kcp.output = output
 	kcp.wmax = 1 << 30
-	kcp.DRE.lastAckTime = time.Now()
+	kcp.DRE.ppDelTime = make(map[uint32]time.Time)
+	kcp.DRE.ppDelivered = make(map[uint32]float64)
 	if CongestionControl == "BBR" {
 		//kcp.bbrOnConnectionInit()
 	}
@@ -405,6 +408,8 @@ func (kcp *KCP) Send(buffer []byte) int {
 		} else { // stream mode
 			seg.frg = 0
 		}
+		kcp.DRE.ppDelivered[seg.sn] = kcp.DRE.totalDelivered
+		kcp.DRE.ppDelTime[seg.sn] = kcp.DRE.lastDelTime
 		kcp.snd_queue = append(kcp.snd_queue, seg)
 		buffer = buffer[size:]
 	}
@@ -458,6 +463,14 @@ func (kcp *KCP) parse_ack(sn uint32) {
 			// have to shift the segments behind forward,
 			// which is an expensive operation for large window
 			seg.acked = 1
+			kcp.DRE.totalDelivered += float64(len(seg.data))
+			kcp.DRE.lastDelTime = time.Now()
+			dataAcked := kcp.DRE.totalDelivered - kcp.DRE.ppDelivered[seg.sn]
+			delete(kcp.DRE.ppDelivered, seg.sn)
+			ackElapsed := kcp.DRE.lastDelTime.Sub(kcp.DRE.ppDelTime[seg.sn])
+			delete(kcp.DRE.ppDelTime, seg.sn)
+			ackRate := dataAcked / ackElapsed.Seconds()
+			log.Println("ackRate =", ackRate/1024, "KiB/s")
 			kcp.delSegment(seg)
 			break
 		}
@@ -665,11 +678,6 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	// cwnd update when packet arrived
 	if kcp.nocwnd == 0 {
 		if acks := _itimediff(kcp.snd_una, snd_una); acks > 0 {
-			// update speed sample
-			speedSamp := float64(acks) / time.Since(kcp.DRE.lastAckTime).Seconds()
-			kcp.DRE.speed = 0.99*kcp.DRE.speed + 0.01*speedSamp
-			kcp.DRE.lastAckTime = time.Now()
-			log.Println("Speed estimate is", kcp.DRE.speed, "pkt/s")
 			switch CongestionControl {
 			case "BIC":
 				kcp.bic_onack(acks)
