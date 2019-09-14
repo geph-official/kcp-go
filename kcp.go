@@ -638,7 +638,6 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 			case CongestionControlBIC:
 				kcp.bic_onack()
 			}
-
 		}
 	}
 
@@ -666,7 +665,7 @@ func (kcp *KCP) bic_onack() {
 	floatcwnd := float64(kcp.cwnd) + float64(bicinc)/float64(kcp.cwnd)
 	kcp.incr = uint32(float64(kcp.mss) * floatcwnd)
 	kcp.cwnd = kcp.incr / kcp.mss
-	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
+	log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; floatcwnd =", floatcwnd, "; wmax =", kcp.wmax, "; rmt_wnd =", kcp.rmt_wnd)
 	if kcp.cwnd > kcp.rmt_wnd {
 		kcp.cwnd = kcp.rmt_wnd
 		kcp.incr = kcp.rmt_wnd * kcp.mss
@@ -898,7 +897,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		// congestion control, https://tools.ietf.org/html/rfc5681
 		if lostSegs+change > 0 {
 			// BIC
-			beta := 0.05
+			beta := 0.125
 			if kcp.cwnd < kcp.wmax {
 				kcp.wmax = uint32(float64(cwnd) * (2.0 - beta) / 2.0)
 			} else {
