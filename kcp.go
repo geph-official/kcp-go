@@ -633,23 +633,34 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 			} else {
 				bicinc = int32(kcp.cwnd) - int32(kcp.wmax)
 			}
-			if bicinc > 8 {
-				bicinc = 8
-			} else if bicinc <= 0 {
+			var changeincr bool
+			if bicinc <= 0 {
 				mss := kcp.mss
 				if kcp.incr < mss {
 					kcp.incr = mss
 				}
-				kcp.incr += (mss*mss)/kcp.incr + (mss / 4)
+				kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
 				log.Println("incr to", kcp.incr)
 				if (kcp.cwnd+1)*mss <= kcp.incr {
 					bicinc = 1
 				} else {
 					bicinc = 0
 				}
+			} else {
+				changeincr = true
+				if bicinc > 8 {
+					bicinc = 8
+				}
 			}
 			log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
 			kcp.cwnd += uint32(bicinc)
+			if changeincr {
+				kcp.incr += kcp.mss * uint32(bicinc)
+			}
+			if kcp.cwnd > kcp.rmt_wnd {
+				kcp.cwnd = kcp.rmt_wnd
+				kcp.incr = kcp.rmt_wnd * kcp.mss
+			}
 
 			// if kcp.cwnd < kcp.rmt_wnd {
 			// 	mss := kcp.mss
@@ -666,10 +677,6 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 			// 		if (kcp.cwnd+1)*mss <= kcp.incr {
 			// 			kcp.cwnd++
 			// 		}
-			// 	}
-			// 	if kcp.cwnd > kcp.rmt_wnd {
-			// 		kcp.cwnd = kcp.rmt_wnd
-			// 		kcp.incr = kcp.rmt_wnd * mss
 			// 	}
 			// }
 		}
