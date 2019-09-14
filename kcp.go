@@ -2,7 +2,7 @@ package kcp
 
 import (
 	"encoding/binary"
-	"fmt"
+	"log"
 	"sync/atomic"
 	"time"
 )
@@ -450,6 +450,17 @@ func (kcp *KCP) shrink_buf() {
 	}
 }
 
+func (kcp *KCP) processAck(seg *segment) {
+	kcp.DRE.totalDelivered += float64(len(seg.data))
+	kcp.DRE.lastDelTime = time.Now()
+	dataAcked := kcp.DRE.totalDelivered - kcp.DRE.ppDelivered[seg.sn]
+	delete(kcp.DRE.ppDelivered, seg.sn)
+	ackElapsed := kcp.DRE.lastDelTime.Sub(kcp.DRE.ppDelTime[seg.sn])
+	delete(kcp.DRE.ppDelTime, seg.sn)
+	ackRate := dataAcked / ackElapsed.Seconds()
+	log.Println("ackRate =", ackRate/1024, "KiB/s")
+}
+
 func (kcp *KCP) parse_ack(sn uint32) {
 	if _itimediff(sn, kcp.snd_una) < 0 || _itimediff(sn, kcp.snd_nxt) >= 0 {
 		return
@@ -457,21 +468,15 @@ func (kcp *KCP) parse_ack(sn uint32) {
 
 	for k := range kcp.snd_buf {
 		seg := &kcp.snd_buf[k]
+		log.Printf("parse_ack(%v) matching against %v", sn, seg.sn)
 		if sn == seg.sn {
 			// mark and free space, but leave the segment here,
 			// and wait until `una` to delete this, then we don't
 			// have to shift the segments behind forward,
 			// which is an expensive operation for large window
 			seg.acked = 1
-			kcp.DRE.totalDelivered += float64(len(seg.data))
-			kcp.DRE.lastDelTime = time.Now()
-			dataAcked := kcp.DRE.totalDelivered - kcp.DRE.ppDelivered[seg.sn]
-			delete(kcp.DRE.ppDelivered, seg.sn)
-			ackElapsed := kcp.DRE.lastDelTime.Sub(kcp.DRE.ppDelTime[seg.sn])
-			delete(kcp.DRE.ppDelTime, seg.sn)
-			ackRate := dataAcked / ackElapsed.Seconds()
-			panic(fmt.Sprint("ackRate =", ackRate/1024, "KiB/s"))
 			kcp.delSegment(seg)
+			kcp.processAck(seg)
 			break
 		}
 		if _itimediff(sn, seg.sn) < 0 {
