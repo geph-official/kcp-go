@@ -633,16 +633,16 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 			} else {
 				bicinc = int32(kcp.cwnd) - int32(kcp.wmax)
 			}
-			if bicinc > 4 {
-				bicinc = 4
+			if bicinc > 8 {
+				bicinc = 8
 			} else if bicinc <= 0 {
 				mss := kcp.mss
 				if kcp.incr < mss {
 					kcp.incr = mss
 				}
-				kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
+				kcp.incr += (mss*mss)/kcp.incr + (mss / 4)
 				if (kcp.cwnd+1)*mss <= kcp.incr {
-					bicinc = 1
+					bicinc = 4
 				} else {
 					bicinc = 0
 				}
