@@ -31,11 +31,7 @@ const (
 	IKCP_PROBE_LIMIT = 120000 // up to 120 secs to probe window
 )
 
-// Congestion control constants.
-const (
-	CongestionControlBIC = 0
-	CongestionControlBBR = 1
-)
+var CongestionControl = "BIC"
 
 // monotonic reference time point
 var refTime time.Time = time.Now()
@@ -150,10 +146,40 @@ type KCP struct {
 	dead_link                        uint32
 	wmax                             float64
 
+	BBR struct {
+		state string
+
+		pacing_gain float64
+		cwnd_gain   float64
+
+		btlBw       float64
+		rtProp      float64
+		rtPropStamp time.Time
+		targetCwnd  float64
+
+		probeRttDoneStamp time.Time
+		probeRttRoundDone bool
+		priorCwnd         float64
+		idleRestart       bool
+
+		nextRoundDelivered uint
+		roundStart         bool
+		roundCount         uint
+
+		filledPipe  bool
+		fullBw      float64
+		fullBwCount uint
+
+		pacingRate float64
+	}
+
+	DRE struct {
+		lastAckTime time.Time
+		interval    float64
+	}
+
 	fastresend     int32
 	nocwnd, stream int32
-
-	concontrol int
 
 	snd_queue []segment
 	rcv_queue []segment
@@ -194,6 +220,9 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp.dead_link = IKCP_DEADLINK
 	kcp.output = output
 	kcp.wmax = 1 << 30
+	if CongestionControl == "BBR" {
+		//kcp.bbrOnConnectionInit()
+	}
 	return kcp
 }
 
@@ -635,8 +664,12 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	// cwnd update when packet arrived
 	if kcp.nocwnd == 0 {
 		if acks := _itimediff(kcp.snd_una, snd_una); acks > 0 {
-			switch kcp.concontrol {
-			case CongestionControlBIC:
+			// update speed sample
+			speedSamp := float64(acks) / time.Since(kcp.DRE.lastAckTime).Seconds()
+			kcp.DRE.interval = 0.99*kcp.DRE.interval + 0.01*(1/speedSamp)
+			log.Println("Speed estimate is", 1/kcp.DRE.interval, "pkt/s")
+			switch CongestionControl {
+			case "BIC":
 				kcp.bic_onack(acks)
 			}
 		}
@@ -646,30 +679,6 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		kcp.flush(true)
 	}
 	return 0
-}
-
-func (kcp *KCP) bic_onack(acks int32) {
-	// TCP BIC
-	for i := 0; i < int(acks); i++ {
-		var bicinc float64
-		if kcp.cwnd < kcp.wmax {
-			bicinc = (kcp.wmax - kcp.cwnd) / 2
-		} else {
-			bicinc = kcp.cwnd - kcp.wmax
-		}
-		if bicinc <= 1 {
-			bicinc = 1
-		} else {
-			if bicinc > 32 {
-				bicinc = 32
-			}
-		}
-		kcp.cwnd += bicinc / kcp.cwnd
-		if uint32(kcp.cwnd) > kcp.rmt_wnd {
-			kcp.cwnd = float64(kcp.rmt_wnd)
-		}
-	}
-	log.Println("cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
 }
 
 func (kcp *KCP) wnd_unused() uint16 {
@@ -881,18 +890,11 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 	// cwnd update
 	if kcp.nocwnd == 0 {
-		switch kcp.concontrol {
-		case CongestionControlBIC:
+		switch CongestionControl {
+		case "BIC":
 			// congestion control, https://tools.ietf.org/html/rfc5681
 			if lostSegs+change > 0 {
-				// BIC
-				beta := 0.125
-				if kcp.cwnd < kcp.wmax {
-					kcp.wmax = kcp.cwnd * (2.0 - beta) / 2.0
-				} else {
-					kcp.wmax = kcp.cwnd
-				}
-				kcp.cwnd = kcp.cwnd * (1.0 - beta)
+				kcp.bic_onloss()
 			}
 		}
 		if kcp.cwnd < 1 {
