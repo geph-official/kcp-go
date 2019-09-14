@@ -2,7 +2,6 @@ package kcp
 
 import (
 	"encoding/binary"
-	"log"
 	"sync/atomic"
 	"time"
 )
@@ -458,7 +457,7 @@ func (kcp *KCP) processAck(seg *segment) {
 	ackElapsed := kcp.DRE.lastDelTime.Sub(kcp.DRE.ppDelTime[seg.sn])
 	delete(kcp.DRE.ppDelTime, seg.sn)
 	ackRate := dataAcked / ackElapsed.Seconds()
-	log.Println("ackRate =", ackRate/1024, "KiB/s")
+	ackRate = ackRate
 }
 
 func (kcp *KCP) parse_ack(sn uint32) {
@@ -468,7 +467,6 @@ func (kcp *KCP) parse_ack(sn uint32) {
 
 	for k := range kcp.snd_buf {
 		seg := &kcp.snd_buf[k]
-		log.Printf("parse_ack(%v) matching against %v", sn, seg.sn)
 		if sn == seg.sn {
 			// mark and free space, but leave the segment here,
 			// and wait until `una` to delete this, then we don't
@@ -505,7 +503,6 @@ func (kcp *KCP) parse_una(una uint32) {
 	for k := range kcp.snd_buf {
 		seg := &kcp.snd_buf[k]
 		if _itimediff(una, seg.sn) > 0 {
-			kcp.processAck(seg)
 			kcp.delSegment(seg)
 			count++
 		} else {
