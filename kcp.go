@@ -881,31 +881,20 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 	// cwnd update
 	if kcp.nocwnd == 0 {
-		// update ssthresh
-		// rate halving, https://tools.ietf.org/html/rfc6937
-		if change > 0 {
-			log.Println("rate halving!")
-			inflight := kcp.snd_nxt - kcp.snd_una
-			kcp.ssthresh = inflight / 2
-			if kcp.ssthresh < IKCP_THRESH_MIN {
-				kcp.ssthresh = IKCP_THRESH_MIN
+		switch kcp.concontrol {
+		case CongestionControlBIC:
+			// congestion control, https://tools.ietf.org/html/rfc5681
+			if lostSegs+change > 50 {
+				// BIC
+				beta := 0.125
+				if kcp.cwnd < kcp.wmax {
+					kcp.wmax = kcp.cwnd * (2.0 - beta) / 2.0
+				} else {
+					kcp.wmax = kcp.cwnd
+				}
+				kcp.cwnd = kcp.cwnd * (1.0 - beta)
 			}
-			kcp.cwnd = float64(inflight/2 + resent)
 		}
-
-		// congestion control, https://tools.ietf.org/html/rfc5681
-		if lostSegs+change > 0 {
-			// BIC
-			beta := 0.125
-			if kcp.cwnd < kcp.wmax {
-				kcp.wmax = kcp.cwnd * (2.0 - beta) / 2.0
-			} else {
-				kcp.wmax = kcp.cwnd
-			}
-			kcp.cwnd = kcp.cwnd * (1.0 - beta)
-			log.Println("lost", lostSegs+fastRetransSegs, "segments, decrease cwnd!")
-		}
-
 		if kcp.cwnd < 1 {
 			kcp.cwnd = 1
 		}
