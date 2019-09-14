@@ -648,7 +648,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 				}
 			}
 			log.Println("bicinc =", bicinc, "; cwnd =", kcp.cwnd, "; wmax =", kcp.wmax)
-			kcp.cwnd += bicinc
+			kcp.cwnd += uint32(bicinc)
 
 			// if kcp.cwnd < kcp.rmt_wnd {
 			// 	mss := kcp.mss
