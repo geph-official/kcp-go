@@ -884,7 +884,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		switch kcp.concontrol {
 		case CongestionControlBIC:
 			// congestion control, https://tools.ietf.org/html/rfc5681
-			if lostSegs+change > 50 {
+			if lostSegs+change > 0 {
 				// BIC
 				beta := 0.125
 				if kcp.cwnd < kcp.wmax {
